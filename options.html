@@ -1,0 +1,275 @@
+<!doctype html>
+<html lang="tr">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Muayene Kabul Formu Ayarları</title>
+    <style>
+      :root {
+        --bg: #f6f7f9;
+        --panel: #ffffff;
+        --line: #d8dee6;
+        --text: #1f2a37;
+        --muted: #4a586a;
+        --primary: #175ea8;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        font-family: Arial, sans-serif;
+        background: var(--bg);
+        color: var(--text);
+      }
+      main {
+        max-width: 920px;
+        margin: 16px auto;
+        background: var(--panel);
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        padding: 18px;
+      }
+      h1 {
+        margin-top: 0;
+        margin-bottom: 6px;
+        font-size: 22px;
+      }
+      .page-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 10px;
+      }
+      p.note {
+        margin-top: 0;
+        color: var(--muted);
+      }
+      .grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 12px;
+      }
+      .field {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+      }
+      .field.full {
+        grid-column: 1 / -1;
+      }
+      label {
+        font-size: 14px;
+        font-weight: 700;
+      }
+      input,
+      textarea {
+        width: 100%;
+        border: 1px solid var(--line);
+        border-radius: 6px;
+        padding: 10px;
+        font-size: 14px;
+      }
+      textarea {
+        min-height: 76px;
+        resize: vertical;
+      }
+      .members {
+        border: 1px solid var(--line);
+        border-radius: 6px;
+        padding: 10px;
+      }
+      .member-row {
+        display: grid;
+        grid-template-columns: 1fr auto;
+        gap: 8px;
+        margin-bottom: 8px;
+      }
+      .member-row:last-child {
+        margin-bottom: 0;
+      }
+      .danger-btn,
+      .secondary-btn,
+      .primary-btn {
+        border: 1px solid transparent;
+        border-radius: 6px;
+        padding: 9px 12px;
+        cursor: pointer;
+        font-size: 14px;
+      }
+      .danger-btn {
+        border-color: #c33;
+        color: #c33;
+        background: #fff;
+      }
+      .secondary-btn {
+        border-color: var(--line);
+        background: #fff;
+        color: var(--text);
+      }
+      .primary-btn {
+        background: var(--primary);
+        color: #fff;
+      }
+      .actions {
+        margin-top: 16px;
+        display: flex;
+        gap: 10px;
+      }
+      .inline-actions {
+        display: flex;
+        gap: 10px;
+        align-items: center;
+      }
+      .hint {
+        font-size: 13px;
+        color: var(--muted);
+      }
+      .modal {
+        position: fixed;
+        inset: 0;
+        display: none;
+        align-items: center;
+        justify-content: center;
+        background: rgba(0, 0, 0, 0.42);
+        padding: 16px;
+        z-index: 50;
+      }
+      .modal.open {
+        display: flex;
+      }
+      .modal-content {
+        width: min(720px, 100%);
+        max-height: calc(100vh - 32px);
+        overflow: auto;
+        background: #fff;
+        border-radius: 8px;
+        border: 1px solid var(--line);
+        padding: 14px;
+      }
+      .modal-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 10px;
+      }
+      .modal-title {
+        margin: 0;
+        font-size: 18px;
+      }
+      .yapilanis-row {
+        display: grid;
+        grid-template-columns: 1fr auto;
+        gap: 8px;
+        margin-bottom: 8px;
+      }
+      .modal-actions {
+        display: flex;
+        justify-content: flex-end;
+        gap: 8px;
+        margin-top: 12px;
+      }
+      #status {
+        margin-top: 12px;
+        min-height: 20px;
+        color: #0f7a34;
+        font-weight: 700;
+      }
+      @media (max-width: 760px) {
+        .page-header {
+          flex-direction: column;
+          align-items: flex-start;
+        }
+        .grid {
+          grid-template-columns: 1fr;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <div class="page-header">
+        <h1>Muayene Kabul Formu Ayarları</h1>
+        <button class="secondary-btn" id="openSamplePageBtn" type="button">Örnek Formu Aç</button>
+      </div>
+      <p class="note">
+        Bu alanlar tüm formlarda otomatik kullanılır. Fatura bazlı veriler sayfadan çekilir.
+      </p>
+
+      <form id="settingsForm">
+        <div class="grid">
+          <div class="field full">
+            <label for="idareAdi">İdarenin Adı</label>
+            <input id="idareAdi" name="idareAdi" type="text" />
+          </div>
+
+          <div class="field full">
+            <label for="muayeneEdilenYer">Muayene Edilen Yer</label>
+            <input id="muayeneEdilenYer" name="muayeneEdilenYer" type="text" />
+          </div>
+
+          <div class="field">
+            <label for="komisyonBaskani">Komisyon Başkanı</label>
+            <input id="komisyonBaskani" name="komisyonBaskani" type="text" />
+          </div>
+
+          <div class="field">
+            <label for="okulMuduru">Okul Müdürü</label>
+            <input id="okulMuduru" name="okulMuduru" type="text" />
+          </div>
+
+          <div class="field full">
+            <label>Yapılan İş Kayıtları</label>
+            <div class="inline-actions">
+              <button class="secondary-btn" id="openYapilanIsModalBtn" type="button">
+                Yapılan İş Listesini Düzenle
+              </button>
+              <span class="hint" id="yapilanIsCountHint">Kayıt sayısı: 0</span>
+            </div>
+          </div>
+
+          <div class="field full">
+            <label>Üyeler</label>
+            <div class="members">
+              <div id="membersContainer"></div>
+              <button class="secondary-btn" id="addMemberBtn" type="button">Üye Ekle</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="actions">
+          <button class="primary-btn" type="submit">Kaydet</button>
+          <button class="secondary-btn" id="resetBtn" type="button">Sıfırla</button>
+        </div>
+      </form>
+
+      <div id="status"></div>
+    </main>
+
+    <div class="modal" id="yapilanIsModal" aria-hidden="true">
+      <div class="modal-content" role="dialog" aria-modal="true" aria-labelledby="yapilanIsTitle">
+        <div class="modal-header">
+          <h2 class="modal-title" id="yapilanIsTitle">Yapılan İş Kayıtları</h2>
+          <button class="secondary-btn" id="closeYapilanIsModalBtn" type="button">Kapat</button>
+        </div>
+
+        <p class="hint">
+          Satırları düzenleyin, silin veya yeni satır ekleyin. Boş satırlar kaydedilmez.
+        </p>
+
+        <div id="yapilanIsContainer"></div>
+
+        <div class="inline-actions">
+          <button class="secondary-btn" id="addYapilanIsBtn" type="button">Satır Ekle</button>
+        </div>
+
+        <div class="modal-actions">
+          <button class="secondary-btn" id="cancelYapilanIsBtn" type="button">Vazgeç</button>
+          <button class="primary-btn" id="saveYapilanIsBtn" type="button">Kaydet</button>
+        </div>
+      </div>
+    </div>
+
+    <script src="options.js"></script>
+  </body>
+</html>

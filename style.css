@@ -1,0 +1,286 @@
+/* Print-focused layout for Muayene ve Kabul Tutanağı */
+
+:root {
+  --page-width: 210mm;
+  --page-min-height: 297mm;
+  --border-color: #111;
+  --text-color: #111;
+  --muted: #444;
+  --bg: #f3f5f7;
+  --font-main: "Times New Roman", Georgia, serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  color: var(--text-color);
+  background: var(--bg);
+  font-family: var(--font-main);
+}
+
+.screen-toolbar {
+  width: var(--page-width);
+  margin: 14px auto 0;
+  display: flex;
+  gap: 10px;
+}
+
+.screen-toolbar button,
+.screen-toolbar a {
+  appearance: none;
+  border: 1px solid #1b4c80;
+  background: #1b4c80;
+  color: #fff;
+  border-radius: 6px;
+  font-size: 14px;
+  line-height: 1;
+  text-decoration: none;
+  padding: 10px 14px;
+  cursor: pointer;
+}
+
+.screen-toolbar a {
+  background: #fff;
+  color: #1b4c80;
+}
+
+.page {
+  padding: 12px;
+}
+
+.document {
+  width: var(--page-width);
+  min-height: var(--page-min-height);
+  margin: 0 auto;
+  background: #fff;
+  padding: 10mm 10mm 12mm;
+  border: 1px solid #ddd;
+  position: relative;
+}
+
+h1,
+h2 {
+  margin: 0;
+  text-align: center;
+  font-size: 18px;
+  letter-spacing: 0.2px;
+}
+
+h1 {
+  margin-bottom: 8px;
+}
+
+h2 {
+  margin: 10px 0 8px;
+  font-size: 16px;
+}
+
+.section-title {
+  text-align: center;
+  font-weight: 700;
+  margin: 10px 0 6px;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.info-table {
+  margin-bottom: 8px;
+  font-size: 14px;
+}
+
+.info-table th,
+.info-table td {
+  border: 1px solid var(--border-color);
+  padding: 6px 8px;
+  vertical-align: top;
+}
+
+.info-table th {
+  width: 44%;
+  text-align: left;
+  font-weight: 700;
+}
+
+.items-table {
+  margin-top: 4px;
+  font-size: 12.8px;
+}
+
+.items-table th,
+.items-table td {
+  border: 1px solid var(--border-color);
+  padding: 4px 5px;
+  vertical-align: top;
+}
+
+.items-table th {
+  text-align: center;
+  font-weight: 700;
+}
+
+.items-table td {
+  text-align: center;
+}
+
+.items-table td:nth-child(2) {
+  text-align: left;
+}
+
+.narrative {
+  margin: 8px 0 10px;
+  border: 1px solid var(--border-color);
+  padding: 8px;
+  min-height: 80px;
+  text-align: justify;
+  line-height: 1.35;
+  font-size: 14px;
+}
+
+.signatures {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 8px;
+  min-height: 100px;
+  break-inside: avoid;
+  page-break-inside: avoid;
+}
+
+.signature-box {
+  min-height: 86px;
+  border: 1px solid var(--border-color);
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  align-items: center;
+  padding: 8px;
+  text-align: center;
+}
+
+.signature-name {
+  font-weight: 700;
+  font-size: 14px;
+}
+
+.signature-role {
+  margin-top: 4px;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.manager-block {
+  margin-top: 50px;
+  text-align: center;
+  line-height: 1.35;
+  break-inside: avoid;
+  page-break-inside: avoid;
+}
+
+#formDate {
+  font-size: 14px;
+  color: var(--muted);
+}
+
+#okulMuduru {
+  margin-top: 14px;
+  font-weight: 700;
+  font-size: 14px;
+}
+
+.page-markers {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.page-marker {
+  position: absolute;
+  left: 0;
+  width: 100%;
+  text-align: center;
+  font-size: 11px;
+  color: #333;
+  display: none;
+}
+
+.empty-line {
+  color: #666;
+  font-style: italic;
+}
+
+@media (max-width: 920px) {
+  :root {
+    --page-width: 100%;
+  }
+
+  .page {
+    padding: 0;
+  }
+
+  .document {
+    border: none;
+    min-height: auto;
+    padding: 10px;
+  }
+
+  .screen-toolbar {
+    width: 100%;
+    padding: 0 10px;
+  }
+
+  .signatures {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media print {
+  @page {
+    size: A4;
+    margin: 9mm;
+  }
+
+  html,
+  body {
+    background: #fff;
+    margin: 0;
+    padding: 0;
+  }
+
+  .screen-only {
+    display: none !important;
+  }
+
+  .document {
+    width: 100%;
+    min-height: auto;
+    border: none;
+    padding: 0;
+    margin: 0;
+  }
+
+  .signatures {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+
+  .narrative,
+  .signature-box,
+  .info-table th,
+  .info-table td,
+  .items-table th,
+  .items-table td {
+    border-color: #000;
+  }
+
+  .page-marker {
+    display: block;
+    color: #000;
+  }
+}

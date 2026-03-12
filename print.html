@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="tr">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Muayene ve Kabul Tutanağı</title>
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <div class="screen-toolbar screen-only">
+      <button id="printButton" type="button">Yazdır</button>
+      <a id="settingsLink" href="#" role="button">Ayarları Aç</a>
+    </div>
+
+    <main class="page">
+      <section class="document" id="documentRoot">
+        <h1>MUAYENE VE KABUL TUTANAĞI</h1>
+
+        <table class="info-table">
+          <tbody>
+            <tr>
+              <th>İdarenin Adı :</th>
+              <td id="idareAdi">-</td>
+            </tr>
+            <tr>
+              <th>Yapılan İş / Mal / Hizmetin Adı, Niteliği :</th>
+              <td id="yapilanIs">-</td>
+            </tr>
+            <tr>
+              <th>Onay Belgesi Tarih ve No.su :</th>
+              <td id="onayBelgesi">-</td>
+            </tr>
+            <tr>
+              <th>Satanın Adı Ünvanı :</th>
+              <td id="satanFirma">-</td>
+            </tr>
+            <tr>
+              <th>Muayene Edilen Yer :</th>
+              <td id="muayeneYeri">-</td>
+            </tr>
+          </tbody>
+        </table>
+
+        <table class="items-table" id="itemsTable">
+          <thead>
+            <tr>
+              <th>S. No</th>
+              <th>Teslim Alınan Malın Cinsi ve Özellikleri</th>
+              <th>Miktarı</th>
+              <th>Birimi</th>
+              <th>Teslim Tarihi</th>
+              <th>Kabul Edilen Miktar</th>
+              <th>Red Edilen Miktar</th>
+            </tr>
+          </thead>
+          <tbody id="itemsBody"></tbody>
+        </table>
+
+        <h2>MUAYENE VE KABUL KOMİSYONU</h2>
+
+        <p class="narrative" id="narrativeText">-</p>
+
+        <div class="section-title">Muayene ve Kabul Görevlileri</div>
+        <div class="signatures" id="signatures"></div>
+
+        <div class="manager-block">
+          <div id="formDate">-</div>
+          <div id="okulMuduru">-</div>
+          <div class="signature-role">Okul Müdürü</div>
+        </div>
+
+        <div id="pageMarkers" class="page-markers"></div>
+      </section>
+    </main>
+
+    <script src="print.js"></script>
+  </body>
+</html>
