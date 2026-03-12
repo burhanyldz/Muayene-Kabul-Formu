@@ -1,5 +1,5 @@
 // Content script
-// - Injects "Muayene Kabul Formu" button next to existing action buttons.
+// - Injects "Muayene Kabul Formu" button into detail and list action areas.
 // - Fetches invoice XML from gateway and parses structured invoice data.
 // - Sends structured payload to background service worker.
 
@@ -7,8 +7,11 @@
   "use strict";
 
   const BUTTON_ID = "mkf-generate-button";
+  const LIST_BUTTON_ID = "mkf-generate-list-button";
   const BUTTON_TEXT = "Muayene Kabul Formu";
   const TARGET_BUTTON_TEXTS = ["Yazdır / PDF olarak kaydet", "Kapat"];
+  const LIST_TABLE_SELECTOR = "#eFaturaSorgulaDataTable";
+  const LIST_ROW_SELECTOR = "#eFaturaSorgulaDataTable tbody tr";
 
   const STORAGE_KEYS = {
     SETTINGS: "mkf_settings",
@@ -87,18 +90,23 @@
   start();
 
   function start() {
-    injectButtonIfNeeded();
+    injectButtonsIfNeeded();
 
     // React-based pages can re-render the action area; keep watching the DOM.
-    const observer = new MutationObserver(() => injectButtonIfNeeded());
+    const observer = new MutationObserver(() => injectButtonsIfNeeded());
     observer.observe(document.documentElement, { childList: true, subtree: true });
 
     // Safety net for delayed rendering in heavy pages.
-    window.setInterval(injectButtonIfNeeded, 2000);
+    window.setInterval(injectButtonsIfNeeded, 2000);
   }
 
-  function injectButtonIfNeeded() {
-    const buttonBar = findButtonBar();
+  function injectButtonsIfNeeded() {
+    injectDetailButtonIfNeeded();
+    injectListButtonIfNeeded();
+  }
+
+  function injectDetailButtonIfNeeded() {
+    const buttonBar = findDetailButtonBar();
     if (!buttonBar) {
       return;
     }
@@ -128,51 +136,14 @@
       button.textContent = "Hazırlanıyor...";
 
       try {
-        const settings = await getSettings();
-        if (isSettingsCompletelyEmpty(settings)) {
-          const goSetup = await showConfirmDialog(
-            "Muayene Kabul Formu ayarları henüz boş görünüyor.\nİlk kullanım için ayar sayfasını şimdi açmak ister misiniz?"
-          );
-          if (goSetup) {
-            await openOptionsPage();
-          }
+        const runResult = await runGenerateFlow({ sourceUrl: window.location.href });
+        if (runResult.cancelled) {
           return;
         }
 
-        const yapilanIs = await askYapilanIs();
-
-        // User cancelled prompt.
-        if (yapilanIs === null) {
-          return;
-        }
-
-        const invoiceDoc = getInvoiceDocument();
-        if (!invoiceDoc) {
-          throw new Error("Fatura içeriği bulunamadı (iframe erişimi yok).\nSayfayı yeniden yükleyip tekrar deneyin.");
-        }
-
-        const scrapeResult = await scrapeInvoiceData(invoiceDoc);
-        const scraped = scrapeResult.invoice;
-        const payload = {
-          sourceUrl: window.location.href,
-          scrapedAt: new Date().toISOString(),
-          yapilanIs,
-          settings,
-          invoice: scraped
-        };
-
-        const response = await sendRuntimeMessage({
-          type: "MKF_OPEN_PRINT_PAGE",
-          payload
-        });
-
-        if (!response?.ok) {
-          throw new Error(response?.error || "Print sekmesi açılamadı.");
-        }
-
-        if (scrapeResult.warnings.length) {
+        if (runResult.warnings.length) {
           // Non-blocking info: do not stop flow after opening print page.
-          void showAlertDialog(scrapeResult.warnings.join("\n"), "Bilgilendirme");
+          void showAlertDialog(runResult.warnings.join("\n"), "Bilgilendirme");
         }
       } catch (error) {
         await showAlertDialog(`Muayene Kabul Formu oluşturulamadı:\n${error.message || error}`);
@@ -186,7 +157,76 @@
     buttonBar.appendChild(button);
   }
 
-  function findButtonBar() {
+  function injectListButtonIfNeeded() {
+    const buttonBar = findListButtonBar();
+    if (!buttonBar) {
+      return;
+    }
+
+    let button = document.getElementById(LIST_BUTTON_ID);
+    if (!button || !button.isConnected) {
+      button = document.createElement("button");
+      button.id = LIST_BUTTON_ID;
+      button.type = "button";
+      button.className = "yte-component yte-button primary";
+      button.textContent = BUTTON_TEXT;
+
+      button.addEventListener("click", async () => {
+        if (isProcessing) {
+          return;
+        }
+
+        const selectedRows = getSelectedListRows();
+        if (selectedRows.length !== 1) {
+          await showAlertDialog("Lütfen önce tek bir kayıt seçin.");
+          return;
+        }
+
+        const selectedRow = selectedRows[0];
+        const ettn = extractListRowEttn(selectedRow);
+        if (!ettn) {
+          await showAlertDialog("Seçili kayıttan ETTN bilgisi okunamadı.");
+          return;
+        }
+
+        isProcessing = true;
+        const originalText = button.textContent;
+        button.disabled = true;
+        button.textContent = "Hazırlanıyor...";
+
+        try {
+          const sourceUrl = firstNonEmpty(extractListRowDetailUrl(selectedRow), window.location.href);
+          const runResult = await runGenerateFlow({
+            ettn,
+            sourceUrl
+          });
+          if (runResult.cancelled) {
+            return;
+          }
+
+          if (runResult.warnings.length) {
+            // Non-blocking info: do not stop flow after opening print page.
+            void showAlertDialog(runResult.warnings.join("\n"), "Bilgilendirme");
+          }
+        } catch (error) {
+          await showAlertDialog(`Muayene Kabul Formu oluşturulamadı:\n${error.message || error}`);
+        } finally {
+          isProcessing = false;
+          button.disabled = false;
+          button.textContent = originalText;
+          updateListButtonState(button);
+        }
+      });
+    }
+
+    if (button.parentElement !== buttonBar || buttonBar.firstElementChild !== button) {
+      buttonBar.insertBefore(button, buttonBar.firstElementChild || null);
+    }
+    applyListButtonGroupStyles(button, buttonBar);
+    updateListButtonState(button);
+  }
+
+  function findDetailButtonBar() {
     const allButtons = Array.from(document.querySelectorAll("button"));
     if (!allButtons.length) {
       return null;
@@ -211,6 +251,100 @@
     return targetButtons[0].parentElement;
   }
 
+  function findListButtonBar() {
+    if (!document.querySelector(LIST_TABLE_SELECTOR)) {
+      return null;
+    }
+    return document.querySelector(".yte-query-panel .yte-query-panel-buttons");
+  }
+
+  function updateListButtonState(button) {
+    if (!button || !button.isConnected) {
+      return;
+    }
+    const selectedRows = getSelectedListRows();
+    const enabled = selectedRows.length === 1 && !isProcessing;
+    button.disabled = !enabled;
+    button.title = enabled ? "" : "Önce tek bir kayıt seçin";
+  }
+
+  function getSelectedListRows() {
+    const rows = Array.from(document.querySelectorAll(LIST_ROW_SELECTOR));
+    if (!rows.length) {
+      return [];
+    }
+
+    const checkedRows = rows.filter((row) => {
+      const checkbox = row.querySelector("td.selection-column input[type='checkbox']");
+      return Boolean(checkbox?.checked);
+    });
+    if (checkedRows.length) {
+      return checkedRows;
+    }
+
+    // Fallback for screens where selected row is marked only by class.
+    const highlightedRows = rows.filter((row) => row.classList.contains("highlight"));
+    return highlightedRows.length === 1 ? highlightedRows : [];
+  }
+
+  function extractListRowEttn(row) {
+    if (!row) {
+      return "";
+    }
+
+    const link = row.querySelector("a.yte-link[href]");
+    return firstNonEmpty(
+      normalizeEttn(extractEttnFromUrl(link?.getAttribute("href") || "")),
+      normalizeEttn(link?.textContent || ""),
+      normalizeEttn(row.textContent || "")
+    );
+  }
+
+  function extractListRowDetailUrl(row) {
+    const href = normalizeWhitespace(row?.querySelector("a.yte-link[href]")?.getAttribute("href") || "");
+    if (!href) {
+      return "";
+    }
+
+    try {
+      return new URL(href, window.location.origin).toString();
+    } catch (_error) {
+      return "";
+    }
+  }
+
+  function applyListButtonGroupStyles(button, buttonBar) {
+    if (!button || !buttonBar) {
+      return;
+    }
+
+    button.style.borderTopLeftRadius = "6px";
+    button.style.borderBottomLeftRadius = "6px";
+
+    const nextButton = findNextSiblingButton(button);
+    if (!nextButton) {
+      return;
+    }
+
+    nextButton.style.borderTopLeftRadius = "0";
+    nextButton.style.borderBottomLeftRadius = "0";
+  }
+
+  function findNextSiblingButton(element) {
+    let node = element?.nextElementSibling || null;
+    while (node) {
+      if (node.matches?.("button")) {
+        return node;
+      }
+      const nestedButton = node.querySelector?.("button");
+      if (nestedButton) {
+        return nestedButton;
+      }
+      node = node.nextElementSibling;
+    }
+    return null;
+  }
+
   function findCommonAncestor(elements) {
     if (!elements.length) {
       return null;
@@ -226,6 +360,70 @@
     }
 
     return null;
+  }
+
+  async function runGenerateFlow({ ettn = "", sourceUrl = window.location.href } = {}) {
+    const settings = await getSettings();
+    if (isSettingsCompletelyEmpty(settings)) {
+      const goSetup = await showConfirmDialog(
+        "Muayene Kabul Formu ayarları henüz boş görünüyor.\nİlk kullanım için ayar sayfasını şimdi açmak ister misiniz?"
+      );
+      if (goSetup) {
+        await openOptionsPage();
+      }
+      return {
+        cancelled: true,
+        warnings: []
+      };
+    }
+
+    const yapilanIs = await askYapilanIs();
+    if (yapilanIs === null) {
+      return {
+        cancelled: true,
+        warnings: []
+      };
+    }
+
+    const explicitEttn = normalizeEttn(ettn);
+    let scraped = null;
+    let warnings = [];
+
+    if (explicitEttn) {
+      const xmlText = await fetchInvoiceXml(explicitEttn);
+      scraped = parseInvoiceXml(xmlText, explicitEttn);
+    } else {
+      const invoiceDoc = getInvoiceDocument();
+      if (!invoiceDoc) {
+        throw new Error("Fatura içeriği bulunamadı (iframe erişimi yok).\nSayfayı yeniden yükleyip tekrar deneyin.");
+      }
+
+      const scrapeResult = await scrapeInvoiceData(invoiceDoc);
+      scraped = scrapeResult.invoice;
+      warnings = Array.isArray(scrapeResult.warnings) ? scrapeResult.warnings : [];
+    }
+
+    const payload = {
+      sourceUrl,
+      scrapedAt: new Date().toISOString(),
+      yapilanIs,
+      settings,
+      invoice: scraped
+    };
+
+    const response = await sendRuntimeMessage({
+      type: "MKF_OPEN_PRINT_PAGE",
+      payload
+    });
+
+    if (!response?.ok) {
+      throw new Error(response?.error || "Print sekmesi açılamadı.");
+    }
+
+    return {
+      cancelled: false,
+      warnings
+    };
   }
 
   async function askYapilanIs() {

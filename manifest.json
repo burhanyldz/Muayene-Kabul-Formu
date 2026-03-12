@@ -9,6 +9,7 @@
   ],
   "host_permissions": [
     "https://butunlesik.hmb.gov.tr/hys/mys-efaturaislemleri/goruntuleHtml*",
+    "https://butunlesik.hmb.gov.tr/hys/mys-efaturaislemleri/efatura/query*",
     "https://butunlesik.hmb.gov.tr/hys/gateway/efatura/efatura/*"
   ],
   "background": {
@@ -17,7 +18,8 @@
   "content_scripts": [
     {
       "matches": [
-        "https://butunlesik.hmb.gov.tr/hys/mys-efaturaislemleri/goruntuleHtml*"
+        "https://butunlesik.hmb.gov.tr/hys/mys-efaturaislemleri/goruntuleHtml*",
+        "https://butunlesik.hmb.gov.tr/hys/mys-efaturaislemleri/efatura/query*"
       ],
       "js": [
         "content.js"
