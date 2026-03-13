@@ -1,6 +1,6 @@
 // print.js
 // - Reads last payload from chrome.storage.local.
-// - Renders print-ready Muayene ve Kabul Tutanağı.
+// - Renders print-ready Muayene ve Kabul Tutanağı (single or multi-invoice).
 
 (() => {
   "use strict";
@@ -18,6 +18,7 @@
     uyeler: [""],
     okulMuduru: ""
   };
+
   const UNIT_CODE_LABELS = Object.freeze({
     ADET: "Adet",
     NIU: "Adet",
@@ -81,13 +82,22 @@
   async function init() {
     bindScreenActions();
 
-    const payload = isSampleMode() ? await loadSamplePayload() : await loadPayload();
-    if (!payload) {
+    const rawPayload = isSampleMode() ? await loadSamplePayload() : await loadPayload();
+    if (!rawPayload) {
+      updatePrintMetaInfo(0, 0);
       renderError("Yazdırılacak veri bulunamadı. Önce fatura sayfasındaki butondan form üretin.");
       return;
     }
 
-    render(payload);
+    const normalizedPayload = normalizePrintPayload(rawPayload);
+    if (!normalizedPayload.documents.length) {
+      updatePrintMetaInfo(0, normalizedPayload.selectedCount);
+      renderError("Yazdırılacak geçerli form bulunamadı.");
+      return;
+    }
+
+    updatePrintMetaInfo(normalizedPayload.documents.length, normalizedPayload.selectedCount);
+    renderDocuments(normalizedPayload.documents);
     setupPaginationEvents();
   }
 
@@ -154,7 +164,7 @@
       sampleSettings.uyeler = ["Mehmet DEMİR", "Fatma AK", "Ali ÇELİK"];
     }
 
-    return {
+    const documentPayload = {
       sourceUrl: "sample-preview",
       scrapedAt: new Date().toISOString(),
       yapilanIs: history[0] || "Klima Alımı",
@@ -183,9 +193,108 @@
         ]
       }
     };
+
+    return {
+      ...documentPayload,
+      documents: [documentPayload],
+      selectedCount: 1
+    };
   }
 
-  function render(payload) {
+  function normalizePrintPayload(payload) {
+    const baseSettings = {
+      ...DEFAULT_SETTINGS,
+      ...(payload?.settings || {})
+    };
+
+    const rawDocuments =
+      Array.isArray(payload?.documents) && payload.documents.length ? payload.documents : [payload];
+
+    const documents = rawDocuments
+      .map((doc, index) => normalizePrintDocument(doc, payload, baseSettings, index))
+      .filter(Boolean);
+
+    const selectedCountRaw = Number(payload?.selectedCount);
+    const selectedCount =
+      Number.isFinite(selectedCountRaw) && selectedCountRaw > 0
+        ? selectedCountRaw
+        : documents.length;
+
+    return {
+      documents,
+      selectedCount
+    };
+  }
+
+  function normalizePrintDocument(documentPayload, rootPayload, baseSettings, index) {
+    const invoice = documentPayload?.invoice || rootPayload?.invoice || {};
+    const hasInvoiceData = Boolean(
+      invoice &&
+        (invoice.number ||
+          invoice.date ||
+          invoice.ettn ||
+          invoice.seller?.name ||
+          (Array.isArray(invoice.items) && invoice.items.length))
+    );
+
+    if (!hasInvoiceData) {
+      return null;
+    }
+
+    return {
+      index: index + 1,
+      sourceUrl: firstNonEmpty(documentPayload?.sourceUrl, rootPayload?.sourceUrl),
+      scrapedAt: firstNonEmpty(documentPayload?.scrapedAt, rootPayload?.scrapedAt),
+      yapilanIs: firstNonEmpty(documentPayload?.yapilanIs, rootPayload?.yapilanIs),
+      settings: {
+        ...baseSettings,
+        ...(documentPayload?.settings || {})
+      },
+      invoice
+    };
+  }
+
+  function updatePrintMetaInfo(documentCount, selectedCount) {
+    const info = document.getElementById("printMetaInfo");
+    if (!info) {
+      return;
+    }
+
+    const safeDocumentCount = Number.isFinite(Number(documentCount)) ? Number(documentCount) : 0;
+    const safeSelectedCount =
+      Number.isFinite(Number(selectedCount)) && Number(selectedCount) > 0
+        ? Number(selectedCount)
+        : safeDocumentCount;
+
+    let text = `Yazdırılmakta olan form sayısı: ${safeDocumentCount}`;
+    if (safeSelectedCount !== safeDocumentCount) {
+      text += ` (Seçilen: ${safeSelectedCount})`;
+    }
+    info.textContent = text;
+  }
+
+  function renderDocuments(documents) {
+    const container = document.getElementById("documentsContainer");
+    const template = document.getElementById("documentTemplate");
+    if (!container || !(template instanceof HTMLTemplateElement)) {
+      return;
+    }
+
+    container.innerHTML = "";
+
+    documents.forEach((payload) => {
+      const fragment = template.content.cloneNode(true);
+      const section = fragment.querySelector(".document");
+      if (!section) {
+        return;
+      }
+
+      renderDocument(section, payload);
+      container.appendChild(section);
+    });
+  }
+
+  function renderDocument(root, payload) {
     const settings = payload.settings || {};
     const invoice = payload.invoice || {};
     const items = Array.isArray(invoice.items) ? invoice.items : [];
@@ -193,22 +302,30 @@
     const invoiceDateFormatted = formatDate(invoice.date);
     const onayBelgesi = buildOnayBelgesi(invoiceDateFormatted, invoice.number);
 
-    setText("idareAdi", settings.idareAdi || "-");
-    setText("yapilanIs", payload.yapilanIs || "-");
-    setText("onayBelgesi", onayBelgesi || "-");
-    setText("satanFirma", invoice.seller?.name || "-");
-    setText("muayeneYeri", settings.muayeneEdilenYer || "-");
+    setFieldText(root, "idareAdi", settings.idareAdi || "-");
+    setFieldText(root, "yapilanIs", payload.yapilanIs || "-");
+    setFieldText(root, "onayBelgesi", onayBelgesi || "-");
+    setFieldText(root, "satanFirma", invoice.seller?.name || "-");
+    setFieldText(root, "muayeneYeri", settings.muayeneEdilenYer || "-");
 
-    renderItems(items, invoiceDateFormatted);
-    renderNarrative(payload, invoiceDateFormatted);
-    renderSignatures(settings);
+    renderItems(root, items, invoiceDateFormatted);
+    renderNarrative(root, payload, invoiceDateFormatted);
+    renderSignatures(root, settings);
 
-    setText("formDate", invoiceDateFormatted || formatDate(new Date().toISOString()));
-    setText("okulMuduru", settings.okulMuduru || "-");
+    setFieldText(root, "formDate", invoiceDateFormatted || formatDate(new Date().toISOString()));
+    setFieldText(root, "okulMuduru", settings.okulMuduru || "-");
   }
 
-  function renderItems(items, invoiceDateFormatted) {
-    const body = document.getElementById("itemsBody");
+  function setFieldText(root, fieldName, value) {
+    const el = root.querySelector(`[data-field="${fieldName}"]`);
+    if (!el) {
+      return;
+    }
+    el.textContent = value || "-";
+  }
+
+  function renderItems(root, items, invoiceDateFormatted) {
+    const body = root.querySelector('[data-field="itemsBody"]');
     if (!body) {
       return;
     }
@@ -217,8 +334,7 @@
 
     if (!items.length) {
       const tr = document.createElement("tr");
-      tr.innerHTML =
-        '<td colspan="7" class="empty-line">Fatura kalemleri bulunamadı</td>';
+      tr.innerHTML = '<td colspan="7" class="empty-line">Fatura kalemleri bulunamadı</td>';
       body.appendChild(tr);
       return;
     }
@@ -243,8 +359,8 @@
     });
   }
 
-  function renderNarrative(payload, invoiceDateFormatted) {
-    const el = document.getElementById("narrativeText");
+  function renderNarrative(root, payload, invoiceDateFormatted) {
+    const el = root.querySelector('[data-field="narrativeText"]');
     if (!el) {
       return;
     }
@@ -265,8 +381,8 @@
     el.textContent = text;
   }
 
-  function renderSignatures(settings) {
-    const container = document.getElementById("signatures");
+  function renderSignatures(root, settings) {
+    const container = root.querySelector('[data-field="signatures"]');
     if (!container) {
       return;
     }
@@ -322,8 +438,12 @@
   }
 
   function updatePageMarkers() {
-    const root = document.getElementById("documentRoot");
-    const markerLayer = document.getElementById("pageMarkers");
+    const roots = Array.from(document.querySelectorAll(".document"));
+    roots.forEach((root) => updateDocumentPageMarkers(root));
+  }
+
+  function updateDocumentPageMarkers(root) {
+    const markerLayer = root?.querySelector('[data-field="pageMarkers"]');
     if (!root || !markerLayer) {
       return;
     }
@@ -332,6 +452,7 @@
       root.dataset.baseMinHeight = root.style.minHeight || "";
     }
 
+    root.style.minHeight = root.dataset.baseMinHeight;
     markerLayer.innerHTML = "";
 
     // Must match @page margins in style.css.
@@ -340,11 +461,10 @@
     const totalPages = getPageCount(contentHeightPx, printablePageHeightPx);
 
     if (totalPages <= 1) {
-      root.style.minHeight = root.dataset.baseMinHeight;
       return;
     }
 
-    // Extend the document to full page multiples so every footer can sit at page bottom.
+    // Extend each document to full page multiples so its own markers stay local.
     root.style.minHeight = `${Math.ceil(totalPages * printablePageHeightPx)}px`;
 
     for (let i = 1; i <= totalPages; i += 1) {
@@ -352,7 +472,6 @@
       marker.className = "page-marker";
       marker.textContent = `${i}/${totalPages}`;
 
-      // Place marker near the bottom of each printed page.
       const markerTop = i * printablePageHeightPx - mmToPx(7);
       marker.style.top = `${Math.max(0, markerTop)}px`;
       markerLayer.appendChild(marker);
@@ -360,15 +479,16 @@
   }
 
   function clearPageMarkers() {
-    const root = document.getElementById("documentRoot");
-    const markerLayer = document.getElementById("pageMarkers");
-    if (markerLayer) {
-      markerLayer.innerHTML = "";
-    }
-
-    if (root && typeof root.dataset.baseMinHeight !== "undefined") {
-      root.style.minHeight = root.dataset.baseMinHeight;
-    }
+    const roots = Array.from(document.querySelectorAll(".document"));
+    roots.forEach((root) => {
+      const markerLayer = root.querySelector('[data-field="pageMarkers"]');
+      if (markerLayer) {
+        markerLayer.innerHTML = "";
+      }
+      if (typeof root.dataset.baseMinHeight !== "undefined") {
+        root.style.minHeight = root.dataset.baseMinHeight;
+      }
+    });
   }
 
   function mmToPx(mm) {
@@ -382,6 +502,7 @@
     // Ignore CSS minimums during pagination measurement.
     root.style.minHeight = "0";
     root.style.height = "auto";
+
     const measured = root.scrollHeight;
     const styles = window.getComputedStyle(root);
     const verticalPadding =
@@ -447,18 +568,7 @@
       return "sıfır";
     }
 
-    const ones = [
-      "",
-      "bir",
-      "iki",
-      "üç",
-      "dört",
-      "beş",
-      "altı",
-      "yedi",
-      "sekiz",
-      "dokuz"
-    ];
+    const ones = ["", "bir", "iki", "üç", "dört", "beş", "altı", "yedi", "sekiz", "dokuz"];
     const tens = ["", "on", "yirmi", "otuz", "kırk", "elli", "altmış", "yetmiş", "seksen", "doksan"];
 
     function underThousand(x) {
@@ -537,14 +647,6 @@
     }
 
     return value;
-  }
-
-  function setText(id, value) {
-    const el = document.getElementById(id);
-    if (!el) {
-      return;
-    }
-    el.textContent = value || "-";
   }
 
   function sanitize(value) {
@@ -632,15 +734,27 @@
   }
 
   function renderError(message) {
-    const root = document.getElementById("documentRoot");
-    if (!root) {
+    const container = document.getElementById("documentsContainer");
+    if (!container) {
       return;
     }
 
-    root.innerHTML = `
-      <h1>MUAYENE VE KABUL TUTANAĞI</h1>
-      <p class="narrative">${sanitize(message)}</p>
+    container.innerHTML = `
+      <section class="document">
+        <h1>MUAYENE VE KABUL TUTANAĞI</h1>
+        <p class="narrative">${sanitize(message)}</p>
+      </section>
     `;
+  }
+
+  function firstNonEmpty(...values) {
+    for (const value of values) {
+      const cleaned = String(value || "").trim();
+      if (cleaned) {
+        return cleaned;
+      }
+    }
+    return "";
   }
 
   function storageGet(keyOrKeys) {

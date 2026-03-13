@@ -2,7 +2,13 @@
   "manifest_version": 3,
   "name": "HYS Muayene Kabul Formu Oluşturucu",
   "description": "T.C. Hazine ve Maliye Bakanlığı HYS (MYS) sisteminde kayıtlı bir e-Fatura için Muayene ve Kabul Tutanağı oluşturur.",
-  "version": "1.0.0",
+  "version": "1.1.0",
+  "icons": {
+    "16": "icons/icon16.png",
+    "32": "icons/icon32.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  },
   "permissions": [
     "storage",
     "tabs"
@@ -29,6 +35,12 @@
   ],
   "options_page": "options.html",
   "action": {
-    "default_title": "Muayene Kabul Formu"
+    "default_title": "Muayene Kabul Formu",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "32": "icons/icon32.png",
+      "48": "icons/icon48.png",
+      "128": "icons/icon128.png"
+    }
   }
 }

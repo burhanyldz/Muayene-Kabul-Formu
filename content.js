@@ -9,9 +9,12 @@
   const BUTTON_ID = "mkf-generate-button";
   const LIST_BUTTON_ID = "mkf-generate-list-button";
   const BUTTON_TEXT = "Muayene Kabul Formu";
+  const MULTI_BUTTON_TEXT = "Çoklu Muayene Kabul Formu";
   const TARGET_BUTTON_TEXTS = ["Yazdır / PDF olarak kaydet", "Kapat"];
   const LIST_TABLE_SELECTOR = "#eFaturaSorgulaDataTable";
   const LIST_ROW_SELECTOR = "#eFaturaSorgulaDataTable tbody tr";
+  const MAX_MULTI_INVOICE_COUNT = 50;
+  const MULTI_FETCH_DELAY_MS = 500;
 
   const STORAGE_KEYS = {
     SETTINGS: "mkf_settings",
@@ -177,15 +180,15 @@
         }
 
         const selectedRows = getSelectedListRows();
-        if (selectedRows.length !== 1) {
-          await showAlertDialog("Lütfen önce tek bir kayıt seçin.");
+        if (selectedRows.length < 1) {
+          await showAlertDialog("Lütfen önce en az bir kayıt seçin.");
           return;
         }
 
-        const selectedRow = selectedRows[0];
-        const ettn = extractListRowEttn(selectedRow);
-        if (!ettn) {
-          await showAlertDialog("Seçili kayıttan ETTN bilgisi okunamadı.");
+        if (selectedRows.length > MAX_MULTI_INVOICE_COUNT) {
+          await showAlertDialog(
+            `En fazla ${MAX_MULTI_INVOICE_COUNT} fatura için muayene kabul formu yazdırabilirsiniz.`
+          );
           return;
         }
 
@@ -193,15 +196,45 @@
         const originalText = button.textContent;
         button.disabled = true;
         button.textContent = "Hazırlanıyor...";
+        let closeProgressModal = null;
 
         try {
-          const sourceUrl = firstNonEmpty(extractListRowDetailUrl(selectedRow), window.location.href);
-          const runResult = await runGenerateFlow({
-            ettn,
-            sourceUrl
-          });
+          let runResult;
+          if (selectedRows.length === 1) {
+            const selectedRow = selectedRows[0];
+            const ettn = extractListRowEttn(selectedRow);
+            if (!ettn) {
+              await showAlertDialog("Seçili kayıttan ETTN bilgisi okunamadı.");
+              return;
+            }
+
+            const sourceUrl = firstNonEmpty(extractListRowDetailUrl(selectedRow), window.location.href);
+            runResult = await runGenerateFlow({
+              ettn,
+              sourceUrl
+            });
+          } else {
+            let progressModal = null;
+            runResult = await runGenerateMultiFlow({
+              selectedRows,
+              sourceUrl: window.location.href,
+              onProgress: ({ processed, total }) => {
+                if (!progressModal) {
+                  progressModal = createMultiProgressModal(total);
+                  closeProgressModal = progressModal.close;
+                }
+                progressModal.update(processed, total);
+              }
+            });
+          }
+
           if (runResult.cancelled) {
             return;
+          }
+
+          if (typeof closeProgressModal === "function") {
+            closeProgressModal();
+            closeProgressModal = null;
           }
 
           if (runResult.warnings.length) {
@@ -209,8 +242,15 @@
             void showAlertDialog(runResult.warnings.join("\n"), "Bilgilendirme");
           }
         } catch (error) {
+          if (typeof closeProgressModal === "function") {
+            closeProgressModal();
+            closeProgressModal = null;
+          }
           await showAlertDialog(`Muayene Kabul Formu oluşturulamadı:\n${error.message || error}`);
         } finally {
+          if (typeof closeProgressModal === "function") {
+            closeProgressModal();
+          }
           isProcessing = false;
           button.disabled = false;
           button.textContent = originalText;
@@ -263,28 +303,58 @@
       return;
     }
     const selectedRows = getSelectedListRows();
-    const enabled = selectedRows.length === 1 && !isProcessing;
-    button.disabled = !enabled;
-    button.title = enabled ? "" : "Önce tek bir kayıt seçin";
+    const selectedCount = selectedRows.length;
+
+    if (isProcessing) {
+      button.disabled = true;
+      button.title = "İşlem sürüyor";
+      return;
+    }
+
+    const nextText = selectedCount > 1 ? MULTI_BUTTON_TEXT : BUTTON_TEXT;
+    if (button.textContent !== nextText) {
+      button.textContent = nextText;
+    }
+
+    button.disabled = selectedCount < 1;
+
+    if (selectedCount < 1) {
+      button.title = "Önce en az bir kayıt seçin";
+      return;
+    }
+
+    if (selectedCount > MAX_MULTI_INVOICE_COUNT) {
+      button.title = `En fazla ${MAX_MULTI_INVOICE_COUNT} fatura seçebilirsiniz`;
+      return;
+    }
+
+    button.title = "";
   }
 
   function getSelectedListRows() {
+    const checkedBoxes = Array.from(
+      document.querySelectorAll(`${LIST_ROW_SELECTOR} td.selection-column input[type='checkbox']:checked`)
+    );
+    if (checkedBoxes.length) {
+      return checkedBoxes
+        .map((checkbox) => checkbox.closest("tr"))
+        .filter((row) => Boolean(row));
+    }
+
+    const hasSelectionCheckbox = Boolean(
+      document.querySelector(`${LIST_ROW_SELECTOR} td.selection-column input[type='checkbox']`)
+    );
+    if (hasSelectionCheckbox) {
+      return [];
+    }
+
     const rows = Array.from(document.querySelectorAll(LIST_ROW_SELECTOR));
     if (!rows.length) {
       return [];
     }
 
-    const checkedRows = rows.filter((row) => {
-      const checkbox = row.querySelector("td.selection-column input[type='checkbox']");
-      return Boolean(checkbox?.checked);
-    });
-    if (checkedRows.length) {
-      return checkedRows;
-    }
-
     // Fallback for screens where selected row is marked only by class.
-    const highlightedRows = rows.filter((row) => row.classList.contains("highlight"));
-    return highlightedRows.length === 1 ? highlightedRows : [];
+    return rows.filter((row) => row.classList.contains("highlight"));
   }
 
   function extractListRowEttn(row) {
@@ -408,7 +478,124 @@
       scrapedAt: new Date().toISOString(),
       yapilanIs,
       settings,
-      invoice: scraped
+      invoice: scraped,
+      documents: [
+        {
+          sourceUrl,
+          scrapedAt: new Date().toISOString(),
+          yapilanIs,
+          settings,
+          invoice: scraped
+        }
+      ]
+    };
+
+    const response = await sendRuntimeMessage({
+      type: "MKF_OPEN_PRINT_PAGE",
+      payload
+    });
+
+    if (!response?.ok) {
+      throw new Error(response?.error || "Print sekmesi açılamadı.");
+    }
+
+    return {
+      cancelled: false,
+      warnings
+    };
+  }
+
+  async function runGenerateMultiFlow({
+    selectedRows = [],
+    sourceUrl = window.location.href,
+    onProgress = null
+  } = {}) {
+    if (!Array.isArray(selectedRows) || !selectedRows.length) {
+      return {
+        cancelled: true,
+        warnings: []
+      };
+    }
+
+    const settings = await getSettings();
+    if (isSettingsCompletelyEmpty(settings)) {
+      const goSetup = await showConfirmDialog(
+        "Muayene Kabul Formu ayarları henüz boş görünüyor.\nİlk kullanım için ayar sayfasını şimdi açmak ister misiniz?"
+      );
+      if (goSetup) {
+        await openOptionsPage();
+      }
+      return {
+        cancelled: true,
+        warnings: []
+      };
+    }
+
+    const yapilanIs = await askYapilanIs();
+    if (yapilanIs === null) {
+      return {
+        cancelled: true,
+        warnings: []
+      };
+    }
+
+    const nowIso = new Date().toISOString();
+    const entries = selectedRows.map((row, index) => ({
+      index,
+      ettn: extractListRowEttn(row),
+      sourceUrl: firstNonEmpty(extractListRowDetailUrl(row), sourceUrl, window.location.href)
+    }));
+
+    const documents = [];
+    const warnings = [];
+    const total = entries.length;
+    let processed = 0;
+
+    if (typeof onProgress === "function") {
+      onProgress({ processed: 0, total });
+    }
+
+    for (const entry of entries) {
+      const order = entry.index + 1;
+      if (!entry.ettn) {
+        warnings.push(`${order}. satırda ETTN bilgisi okunamadı, kayıt atlandı.`);
+      } else {
+        try {
+          const xmlText = await fetchInvoiceXml(entry.ettn);
+          const invoice = parseInvoiceXml(xmlText, entry.ettn);
+          documents.push({
+            sourceUrl: entry.sourceUrl,
+            scrapedAt: new Date().toISOString(),
+            yapilanIs,
+            settings,
+            invoice
+          });
+        } catch (error) {
+          warnings.push(`${order}. satır (${entry.ettn}) işlenemedi: ${error?.message || error}`);
+        }
+      }
+
+      processed += 1;
+      if (typeof onProgress === "function") {
+        onProgress({ processed, total });
+      }
+      if (processed < total) {
+        await delay(MULTI_FETCH_DELAY_MS);
+      }
+    }
+
+    if (!documents.length) {
+      throw new Error("Seçilen faturaların hiçbiri için muayene kabul formu oluşturulamadı.");
+    }
+
+    const payload = {
+      sourceUrl,
+      scrapedAt: nowIso,
+      yapilanIs,
+      settings,
+      invoice: documents[0].invoice,
+      selectedCount: total,
+      documents
     };
 
     const response = await sendRuntimeMessage({
@@ -764,6 +951,98 @@
       document.documentElement.appendChild(overlay);
       okBtn.focus();
     });
+  }
+
+  function createMultiProgressModal(totalCount) {
+    const safeTotal = Math.max(0, Number.parseInt(totalCount, 10) || 0);
+
+    const overlay = document.createElement("div");
+    const dialog = document.createElement("div");
+    const titleEl = document.createElement("h3");
+    const infoEl = document.createElement("p");
+    const progressText = document.createElement("p");
+    const progressBarTrack = document.createElement("div");
+    const progressBarFill = document.createElement("div");
+
+    overlay.style.position = "fixed";
+    overlay.style.inset = "0";
+    overlay.style.background = "rgba(0,0,0,0.45)";
+    overlay.style.display = "flex";
+    overlay.style.alignItems = "center";
+    overlay.style.justifyContent = "center";
+    overlay.style.zIndex = "2147483647";
+    overlay.style.padding = "16px";
+
+    dialog.style.width = "min(560px, 100%)";
+    dialog.style.background = "#fff";
+    dialog.style.borderRadius = "10px";
+    dialog.style.padding = "18px";
+    dialog.style.boxShadow = "0 12px 32px rgba(0,0,0,0.3)";
+    dialog.style.fontFamily = "Arial, sans-serif";
+
+    titleEl.textContent = "Çoklu Muayene Kabul Formu Hazırlanıyor";
+    titleEl.style.margin = "0 0 8px";
+    titleEl.style.fontSize = "18px";
+
+    infoEl.textContent = "Lütfen bekleyin. İşlem tamamlanana kadar sayfadan ayrılmayın.";
+    infoEl.style.margin = "0 0 12px";
+    infoEl.style.fontSize = "13px";
+    infoEl.style.color = "#3d4a59";
+
+    progressText.style.margin = "0 0 8px";
+    progressText.style.fontSize = "14px";
+    progressText.style.color = "#1d2734";
+    progressText.style.fontWeight = "700";
+
+    progressBarTrack.style.width = "100%";
+    progressBarTrack.style.height = "10px";
+    progressBarTrack.style.borderRadius = "999px";
+    progressBarTrack.style.background = "#dde4ed";
+    progressBarTrack.style.overflow = "hidden";
+
+    progressBarFill.style.height = "100%";
+    progressBarFill.style.width = "0%";
+    progressBarFill.style.background = "linear-gradient(90deg, #175ea8 0%, #3b86d1 100%)";
+    progressBarFill.style.transition = "width 120ms ease";
+
+    progressBarTrack.appendChild(progressBarFill);
+    dialog.appendChild(titleEl);
+    dialog.appendChild(infoEl);
+    dialog.appendChild(progressText);
+    dialog.appendChild(progressBarTrack);
+    overlay.appendChild(dialog);
+    document.documentElement.appendChild(overlay);
+
+    const onBeforeUnload = (event) => {
+      event.preventDefault();
+      event.returnValue = "";
+      return "";
+    };
+    window.addEventListener("beforeunload", onBeforeUnload);
+
+    let isClosed = false;
+    const update = (processedCount, totalValue = safeTotal) => {
+      const total = Math.max(1, Number.parseInt(totalValue, 10) || 1);
+      const processed = Math.max(0, Math.min(total, Number.parseInt(processedCount, 10) || 0));
+      const percentage = Math.round((processed / total) * 100);
+      progressText.textContent = `${processed}/${total} fatura işlendi (%${percentage})`;
+      progressBarFill.style.width = `${percentage}%`;
+    };
+
+    const close = () => {
+      if (isClosed) {
+        return;
+      }
+      isClosed = true;
+      window.removeEventListener("beforeunload", onBeforeUnload);
+      overlay.remove();
+    };
+
+    update(0, safeTotal || 1);
+    return {
+      update,
+      close
+    };
   }
 
   function normalizeHistory(values) {
@@ -2299,6 +2578,14 @@
       }
     }
     return "";
+  }
+
+  function delay(milliseconds) {
+    const safeMs = Number(milliseconds);
+    if (!Number.isFinite(safeMs) || safeMs <= 0) {
+      return Promise.resolve();
+    }
+    return new Promise((resolve) => window.setTimeout(resolve, safeMs));
   }
 
   function escapeRegExp(value) {

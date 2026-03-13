@@ -27,6 +27,8 @@ body {
   width: var(--page-width);
   margin: 14px auto 0;
   display: flex;
+  align-items: center;
+  flex-wrap: wrap;
   gap: 10px;
 }
 
@@ -49,8 +51,23 @@ body {
   color: #1b4c80;
 }
 
+.print-meta-info {
+  padding: 8px 10px;
+  border: 1px solid #c6cfda;
+  border-radius: 6px;
+  background: #fff;
+  color: #1f2a38;
+  font-size: 13px;
+}
+
 .page {
   padding: 12px;
+}
+
+#documentsContainer {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
 }
 
 .document {
@@ -189,12 +206,12 @@ table {
   page-break-inside: avoid;
 }
 
-#formDate {
+[data-field="formDate"] {
   font-size: 14px;
   color: var(--muted);
 }
 
-#okulMuduru {
+[data-field="okulMuduru"] {
   margin-top: 14px;
   font-weight: 700;
   font-size: 14px;
@@ -241,6 +258,10 @@ table {
     padding: 0 10px;
   }
 
+  .print-meta-info {
+    width: 100%;
+  }
+
   .signatures {
     grid-template-columns: 1fr;
   }
@@ -269,6 +290,13 @@ table {
     border: none;
     padding: 0;
     margin: 0;
+    break-after: page;
+    page-break-after: always;
+  }
+
+  .document:last-child {
+    break-after: auto;
+    page-break-after: auto;
   }
 
   .signatures {

@@ -4,44 +4,50 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Muayene ve Kabul Tutanağı</title>
+    <link rel="icon" type="image/png" href="logo.png" />
     <link rel="stylesheet" href="style.css" />
   </head>
   <body>
     <div class="screen-toolbar screen-only">
       <button id="printButton" type="button">Yazdır</button>
+      <div id="printMetaInfo" class="print-meta-info">Yazdırılacak tutanak sayısı: 0</div>
       <a id="settingsLink" href="#" role="button">Ayarları Aç</a>
     </div>
 
     <main class="page">
-      <section class="document" id="documentRoot">
+      <div id="documentsContainer"></div>
+    </main>
+
+    <template id="documentTemplate">
+      <section class="document">
         <h1>MUAYENE VE KABUL TUTANAĞI</h1>
 
         <table class="info-table">
           <tbody>
             <tr>
               <th>İdarenin Adı :</th>
-              <td id="idareAdi">-</td>
+              <td data-field="idareAdi">-</td>
             </tr>
             <tr>
               <th>Yapılan İş / Mal / Hizmetin Adı, Niteliği :</th>
-              <td id="yapilanIs">-</td>
+              <td data-field="yapilanIs">-</td>
             </tr>
             <tr>
               <th>Onay Belgesi Tarih ve No.su :</th>
-              <td id="onayBelgesi">-</td>
+              <td data-field="onayBelgesi">-</td>
             </tr>
             <tr>
               <th>Satanın Adı Ünvanı :</th>
-              <td id="satanFirma">-</td>
+              <td data-field="satanFirma">-</td>
             </tr>
             <tr>
               <th>Muayene Edilen Yer :</th>
-              <td id="muayeneYeri">-</td>
+              <td data-field="muayeneYeri">-</td>
             </tr>
           </tbody>
         </table>
 
-        <table class="items-table" id="itemsTable">
+        <table class="items-table">
           <thead>
             <tr>
               <th>S. No</th>
@@ -53,27 +59,27 @@
               <th>Red Edilen Miktar</th>
             </tr>
           </thead>
-          <tbody id="itemsBody"></tbody>
+          <tbody data-field="itemsBody"></tbody>
         </table>
 
         <div class="commission-section">
           <h2>MUAYENE VE KABUL KOMİSYONU</h2>
 
-          <p class="narrative" id="narrativeText">-</p>
+          <p class="narrative" data-field="narrativeText">-</p>
 
           <div class="section-title">Muayene ve Kabul Görevlileri</div>
-          <div class="signatures" id="signatures"></div>
+          <div class="signatures" data-field="signatures"></div>
 
           <div class="manager-block">
-            <div id="formDate">-</div>
-            <div id="okulMuduru">-</div>
+            <div data-field="formDate">-</div>
+            <div data-field="okulMuduru">-</div>
             <div class="signature-role">Okul Müdürü</div>
           </div>
         </div>
 
-        <div id="pageMarkers" class="page-markers"></div>
+        <div data-field="pageMarkers" class="page-markers"></div>
       </section>
-    </main>
+    </template>
 
     <script src="print.js"></script>
   </body>
