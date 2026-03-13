@@ -34,6 +34,7 @@
   const saveYapilanIsBtn = document.getElementById("saveYapilanIsBtn");
   const addYapilanIsBtn = document.getElementById("addYapilanIsBtn");
   const yapilanIsContainer = document.getElementById("yapilanIsContainer");
+  const versionBadge = document.getElementById("versionBadge");
 
   let current = { ...DEFAULT_SETTINGS };
   let yapilanIsEntries = [];
@@ -41,8 +42,17 @@
   document.addEventListener("DOMContentLoaded", init);
 
   function init() {
+    renderVersionBadge();
     bindEvents();
     loadAll();
+  }
+
+  function renderVersionBadge() {
+    if (!versionBadge) {
+      return;
+    }
+    const manifestVersion = chrome?.runtime?.getManifest?.()?.version || "";
+    versionBadge.textContent = manifestVersion ? `v${manifestVersion}` : "v-";
   }
 
   function bindEvents() {

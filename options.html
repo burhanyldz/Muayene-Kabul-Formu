@@ -176,6 +176,21 @@
         color: #0f7a34;
         font-weight: 700;
       }
+      .version-badge {
+        position: fixed;
+        right: 10px;
+        bottom: 8px;
+        border: 1px solid #c7d2df;
+        background: #ffffff;
+        color: #4a586a;
+        border-radius: 999px;
+        padding: 3px 8px;
+        font-size: 12px;
+        line-height: 1.2;
+        box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08);
+        pointer-events: none;
+        user-select: none;
+      }
       @media (max-width: 760px) {
         .page-header {
           flex-direction: column;
@@ -270,6 +285,8 @@
         </div>
       </div>
     </div>
+
+    <div id="versionBadge" class="version-badge" aria-label="Uzantı sürümü">v-</div>
 
     <script src="options.js"></script>
   </body>
