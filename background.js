@@ -15,6 +15,11 @@ const STORAGE_KEYS = {
   SETTINGS: "mkf_settings",
   PRINT_PAYLOAD: "mkf_print_payload"
 };
+const CONTENT_SCRIPT_FILE = "content.js";
+const TARGET_PAGE_PATTERNS = [
+  /^https:\/\/butunlesik\.hmb\.gov\.tr\/hys\/mys-efaturaislemleri\/goruntuleHtml(?:[/?#].*)?$/i,
+  /^https:\/\/butunlesik\.hmb\.gov\.tr\/hys\/mys-efaturaislemleri\/efatura\/query(?:[/?#].*)?$/i
+];
 
 // Initialize missing settings on install/update.
 chrome.runtime.onInstalled.addListener(async () => {
@@ -30,6 +35,30 @@ chrome.runtime.onInstalled.addListener(async () => {
 // Open options page when extension icon is clicked.
 chrome.action.onClicked.addListener(() => {
   chrome.runtime.openOptionsPage();
+});
+
+chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
+  const candidateUrl = changeInfo.url || tab?.url || "";
+  if (!isTargetPageUrl(candidateUrl)) {
+    return;
+  }
+
+  // Status is only present for load lifecycle updates.
+  if (changeInfo.status && changeInfo.status !== "complete") {
+    return;
+  }
+
+  void ensureContentScriptInjected(tabId, candidateUrl);
+});
+
+chrome.webNavigation.onHistoryStateUpdated.addListener((details) => {
+  if (details.frameId !== 0) {
+    return;
+  }
+  if (!isTargetPageUrl(details.url)) {
+    return;
+  }
+  void ensureContentScriptInjected(details.tabId, details.url);
 });
 
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
@@ -118,4 +147,35 @@ function createTab(url) {
       resolve(tab);
     });
   });
+}
+
+function isTargetPageUrl(url) {
+  const text = String(url || "");
+  if (!text) {
+    return false;
+  }
+  return TARGET_PAGE_PATTERNS.some((pattern) => pattern.test(text));
+}
+
+async function ensureContentScriptInjected(tabId, url) {
+  if (!Number.isInteger(tabId) || tabId < 0 || !isTargetPageUrl(url)) {
+    return;
+  }
+
+  try {
+    await chrome.scripting.executeScript({
+      target: { tabId },
+      files: [CONTENT_SCRIPT_FILE]
+    });
+  } catch (error) {
+    const message = error?.message || "";
+    const ignorable =
+      message.includes("Cannot access contents of url") ||
+      message.includes("No tab with id") ||
+      message.includes("Frame with ID 0 was removed");
+
+    if (!ignorable) {
+      console.warn("MKF content script injection failed:", message || error);
+    }
+  }
 }

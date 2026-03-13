@@ -5,12 +5,18 @@
 
 (() => {
   "use strict";
+  const INIT_FLAG = "__MKF_CONTENT_SCRIPT_INITIALIZED__";
+  if (globalThis[INIT_FLAG]) {
+    return;
+  }
+  globalThis[INIT_FLAG] = true;
 
   const BUTTON_ID = "mkf-generate-button";
   const LIST_BUTTON_ID = "mkf-generate-list-button";
   const BUTTON_TEXT = "Muayene Kabul Formu";
   const MULTI_BUTTON_TEXT = "Çoklu Muayene Kabul Formu";
-  const TARGET_BUTTON_TEXTS = ["Yazdır / PDF olarak kaydet", "Kapat"];
+  const DETAIL_PRINT_BUTTON_TEXTS = ["Yazdır / PDF olarak kaydet", "Yazdır", "PDF olarak kaydet"];
+  const DETAIL_CLOSE_BUTTON_TEXT = "Kapat";
   const LIST_TABLE_SELECTOR = "#eFaturaSorgulaDataTable";
   const LIST_ROW_SELECTOR = "#eFaturaSorgulaDataTable tbody tr";
   const MAX_MULTI_INVOICE_COUNT = 50;
@@ -109,8 +115,16 @@
   }
 
   function injectDetailButtonIfNeeded() {
+    if (!isSupportedInvoiceDetailPage()) {
+      removeDetailButtonIfExists();
+      return;
+    }
+
     const buttonBar = findDetailButtonBar();
     if (!buttonBar) {
+      return;
+    }
+    if (buttonBar.closest(".yte-popup-modal, .yte-popup-modal-mask")) {
       return;
     }
 
@@ -158,6 +172,13 @@
     });
 
     buttonBar.appendChild(button);
+  }
+
+  function removeDetailButtonIfExists() {
+    const existing = document.getElementById(BUTTON_ID);
+    if (existing?.isConnected) {
+      existing.remove();
+    }
   }
 
   function injectListButtonIfNeeded() {
@@ -272,23 +293,61 @@
       return null;
     }
 
-    const targetButtons = allButtons.filter((btn) => {
+    const printButtons = allButtons.filter((btn) => {
       const txt = normalizeWhitespace(btn.textContent);
-      return TARGET_BUTTON_TEXTS.some((needle) => txt.includes(needle));
+      return DETAIL_PRINT_BUTTON_TEXTS.some((needle) => txt.includes(needle));
     });
-
-    if (!targetButtons.length) {
+    if (!printButtons.length) {
       return null;
     }
 
-    // Prefer shared ancestor that contains both "Yazdır" and "Kapat" buttons.
-    const common = findCommonAncestor(targetButtons);
-    if (common && common.querySelectorAll("button").length >= 2) {
-      return common;
+    const closeButtons = allButtons.filter((btn) => {
+      const txt = normalizeWhitespace(btn.textContent);
+      return txt === DETAIL_CLOSE_BUTTON_TEXT || txt.includes(DETAIL_CLOSE_BUTTON_TEXT);
+    });
+
+    // Prefer shared ancestor that contains both "Yazdır" and "Kapat" in non-modal area.
+    for (const printBtn of printButtons) {
+      for (const closeBtn of closeButtons) {
+        const common = findCommonAncestor([printBtn, closeBtn]);
+        if (!common) {
+          continue;
+        }
+        if (common.closest(".yte-popup-modal, .yte-popup-modal-mask")) {
+          continue;
+        }
+        const buttonCount = common.querySelectorAll("button").length;
+        if (buttonCount >= 2 && buttonCount <= 8) {
+          return common;
+        }
+      }
     }
 
-    // Fallback: immediate parent of one target button.
-    return targetButtons[0].parentElement;
+    // Fallback: immediate parent of one print button in non-modal area.
+    const nonModalPrint = printButtons.find(
+      (btn) => !btn.closest(".yte-popup-modal, .yte-popup-modal-mask")
+    );
+    return nonModalPrint?.parentElement || null;
+  }
+
+  function isSupportedInvoiceDetailPage() {
+    let parsedUrl;
+    try {
+      parsedUrl = new URL(window.location.href);
+    } catch (_error) {
+      return false;
+    }
+
+    if (parsedUrl.origin !== "https://butunlesik.hmb.gov.tr") {
+      return false;
+    }
+
+    if (parsedUrl.pathname !== "/hys/mys-efaturaislemleri/goruntuleHtml") {
+      return false;
+    }
+
+    const ettn = normalizeEttn(parsedUrl.searchParams.get("faturaEttn") || "");
+    return Boolean(ettn);
   }
 
   function findListButtonBar() {
